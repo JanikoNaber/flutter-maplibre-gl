@@ -153,8 +153,7 @@ class MethodChannelMaplibreGl extends MapLibreGlPlatform {
             );
           },
           onCreatePlatformView: (PlatformViewCreationParams params) {
-            final SurfaceAndroidViewController controller =
-                PlatformViewsService.initSurfaceAndroidView(
+            final controller = PlatformViewsService.initAndroidView(
               id: params.id,
               viewType: 'plugins.flutter.io/mapbox_gl',
               layoutDirection: TextDirection.ltr,
@@ -162,6 +161,7 @@ class MethodChannelMaplibreGl extends MapLibreGlPlatform {
               creationParamsCodec: const StandardMessageCodec(),
               onFocus: () => params.onFocusChanged(true),
             );
+
             controller.addOnPlatformViewCreatedListener(
               params.onPlatformViewCreated,
             );
@@ -299,6 +299,24 @@ class MethodChannelMaplibreGl extends MapLibreGlPlatform {
           'right': rect.right,
           'bottom': rect.bottom,
           'layerIds': layerIds,
+          'filter': filter,
+        },
+      );
+      return reply['features'].map((feature) => jsonDecode(feature)).toList();
+    } on PlatformException catch (e) {
+      return new Future.error(e);
+    }
+  }
+
+  @override
+  Future<List> querySourceFeatures(
+      String sourceId, String? sourceLayerId, List<Object>? filter) async {
+    try {
+      final Map<dynamic, dynamic> reply = await _channel.invokeMethod(
+        'map#querySourceFeatures',
+        <String, Object?>{
+          'sourceId': sourceId,
+          'sourceLayerId': sourceLayerId,
           'filter': filter,
         },
       );
@@ -477,6 +495,20 @@ class MethodChannelMaplibreGl extends MapLibreGlPlatform {
     try {
       return await _channel.invokeMethod('style#setFilter',
           <String, Object>{'layerId': layerId, 'filter': jsonEncode(filter)});
+    } on PlatformException catch (e) {
+      return new Future.error(e);
+    }
+  }
+
+  @override
+  Future<dynamic> getFilter(String layerId) async {
+    try {
+      Map<dynamic, dynamic> reply =
+          await _channel.invokeMethod('style#getFilter', <String, dynamic>{
+        'layerId': layerId,
+      });
+      final filter = reply["filter"];
+      return filter != null ? jsonDecode(filter) : null;
     } on PlatformException catch (e) {
       return new Future.error(e);
     }
@@ -710,4 +742,26 @@ class MethodChannelMaplibreGl extends MapLibreGlPlatform {
 
   @override
   void resizeWebMap() {}
+
+  @override
+  Future<List> getLayerIds() async {
+    try {
+      final Map<dynamic, dynamic> reply =
+          await _channel.invokeMethod('style#getLayerIds');
+      return reply['layers'].map((it) => it.toString()).toList();
+    } on PlatformException catch (e) {
+      return new Future.error(e);
+    }
+  }
+
+  @override
+  Future<List> getSourceIds() async {
+    try {
+      final Map<dynamic, dynamic> reply =
+          await _channel.invokeMethod('style#getSourceIds');
+      return reply['sources'].map((it) => it.toString()).toList();
+    } on PlatformException catch (e) {
+      return new Future.error(e);
+    }
+  }
 }

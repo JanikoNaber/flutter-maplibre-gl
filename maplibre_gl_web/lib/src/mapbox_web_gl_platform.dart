@@ -194,7 +194,7 @@ class MaplibreMapController extends MapLibreGlPlatform
   @override
   Future<bool?> animateCamera(CameraUpdate cameraUpdate,
       {Duration? duration}) async {
-    final cameraOptions = Convert.toCameraOptions(cameraUpdate, _map);
+    final cameraOptions = Convert.toCameraOptions(cameraUpdate, _map).jsObject;
 
     final around = getProperty(cameraOptions, 'around');
     final bearing = getProperty(cameraOptions, 'bearing');
@@ -203,9 +203,9 @@ class MaplibreMapController extends MapLibreGlPlatform
     final zoom = getProperty(cameraOptions, 'zoom');
 
     _map.flyTo({
-      if (around.jsObject != null) 'around': around,
+      if (around != null) 'around': around,
       if (bearing != null) 'bearing': bearing,
-      if (center.jsObject != null) 'center': center,
+      if (center != null) 'center': center,
       if (pitch != null) 'pitch': pitch,
       if (zoom != null) 'zoom': zoom,
       if (duration != null) 'duration': duration.inMilliseconds,
@@ -229,16 +229,40 @@ class MaplibreMapController extends MapLibreGlPlatform
 
   @override
   Future<void> matchMapLanguageWithDeviceDefault() async {
+    // Fix in https://github.com/maplibre/flutter-maplibre-gl/issues/263
+    // ignore: deprecated_member_use
     setMapLanguage(ui.window.locale.languageCode);
   }
 
   @override
   Future<void> setMapLanguage(String language) async {
-    _map.setLayoutProperty(
-      'country-label',
-      'text-field',
-      ['get', 'name_' + language],
-    );
+    final List<dynamic> layers = _map.getStyle()?.layers ?? [];
+
+    final languageRegex = RegExp("(name:[a-z]+)");
+
+    final symbolLayers = layers.where((layer) => layer.type == "symbol");
+
+    for (final layer in symbolLayers) {
+      final dynamic properties = _map.getLayoutProperty(layer.id, 'text-field');
+
+      if (properties == null) {
+        continue;
+      }
+
+      // We could skip the current iteration, whenever there is not current language.
+      if (!languageRegex.hasMatch(properties.toString())) {
+        continue;
+      }
+
+      final newProperties = [
+        "coalesce",
+        ["get", "name:$language"],
+        ["get", "name:latin"],
+        ["get", "name"],
+      ];
+
+      _map.setLayoutProperty(layer.id, 'text-field', newProperties);
+    }
   }
 
   @override
@@ -299,6 +323,35 @@ class MaplibreMapController extends MapLibreGlPlatform
         .map((feature) => {
               'type': 'Feature',
               'id': feature.id as int?,
+              'geometry': {
+                'type': feature.geometry.type,
+                'coordinates': feature.geometry.coordinates,
+              },
+              'properties': feature.properties,
+              'source': feature.source,
+            })
+        .toList();
+  }
+
+  @override
+  Future<List> querySourceFeatures(
+      String sourceId, String? sourceLayerId, List<Object>? filter) async {
+    Map<String, dynamic> parameters = {};
+
+    if (sourceLayerId != null) {
+      parameters['sourceLayer'] = sourceLayerId;
+    }
+
+    if (filter != null) {
+      parameters['filter'] = filter;
+    }
+    print(parameters);
+
+    return _map
+        .querySourceFeatures(sourceId, parameters)
+        .map((feature) => {
+              'type': 'Feature',
+              'id': feature.id,
               'geometry': {
                 'type': feature.geometry.type,
                 'coordinates': feature.geometry.coordinates,
@@ -1005,5 +1058,20 @@ class MaplibreMapController extends MapLibreGlPlatform
   @override
   Future<void> setLayerVisibility(String layerId, bool visible) async {
     _map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+  }
+
+  @override
+  Future getFilter(String layerId) async {
+    return _map.getFilter(layerId);
+  }
+
+  @override
+  Future<List> getLayerIds() async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List> getSourceIds() async {
+    throw UnimplementedError();
   }
 }
